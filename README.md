@@ -36,7 +36,7 @@ curl -s http://localhost:8080/api/getcep/40330200 \
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `DB_PATH` | `/app/data/zipcode.db` | Caminho do SQLite |
+| `DB_PATH` | `{raiz}/data/zipcode.db` | Caminho do SQLite (Docker usa `/app/data/...`) |
 | `INSTALL_ENABLED` | `true` | `false` bloqueia `/api/install` (403) |
 | `DISPLAY_ERROR_DETAILS` | `false` | Detalhes de erro Slim |
 
