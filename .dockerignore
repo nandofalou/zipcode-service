@@ -1,0 +1,10 @@
+.git
+.gitignore
+data/
+.env
+.env.*
+README.md
+skill.md
+.cursor
+*.md
+!database/
