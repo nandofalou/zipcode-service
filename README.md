@@ -80,5 +80,19 @@ O banco fica em `./data/zipcode.db` (volume montado no container `php`).
 ```bash
 composer install
 mkdir -p data
-DB_PATH=./data/zipcode.db INSTALL_ENABLED=true php -S localhost:8000 -t public
+php zipcodeserver
+```
+
+Opcionalmente, você pode executar diretamente o servidor embutido:
+
+```bash
+DB_PATH=./data/zipcode.db INSTALL_ENABLED=true \
+php -S localhost:8000 -t public public/index.php
+```
+
+No Linux, também é possível usar o script como executável:
+
+```bash
+chmod +x zipcodeserver
+./zipcodeserver --port=8000
 ```

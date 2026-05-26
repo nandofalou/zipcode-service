@@ -1,0 +1,121 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+function usage(): void
+{
+    $script = basename(__FILE__);
+    $help = <<<TXT
+Zipcode Server (PHP built-in) - Slim 4
+
+Uso:
+  php {$script} [--host=127.0.0.1] [--port=8090] [--db=./data/zipcode.db] [--install-enabled=true|false]
+  chmod +x {$script} && ./{$script} [opções]
+
+Opções:
+  --host=HOST              Host (padrão: 127.0.0.1)
+  --port=PORT              Porta (padrão: 8090)
+  --db=PATH                Caminho do SQLite (padrão: ./data/zipcode.db)
+  --install-enabled=BOOL   true/false (padrão: true)
+  --help                   Exibe esta ajuda
+
+Exemplos:
+  php {$script}
+  php {$script} --port=8000
+  DB_PATH=./data/zipcode.db INSTALL_ENABLED=false php {$script} --port=8000
+
+TXT;
+
+    fwrite(STDOUT, $help);
+}
+
+function parseBool(?string $value, bool $default): bool
+{
+    if ($value === null) {
+        return $default;
+    }
+    $v = strtolower(trim($value));
+    return match ($v) {
+        '1', 'true', 'yes', 'y', 'on' => true,
+        '0', 'false', 'no', 'n', 'off' => false,
+        default => $default,
+    };
+}
+
+function parseArgs(array $argv): array
+{
+    $out = [];
+    foreach (array_slice($argv, 1) as $arg) {
+        if ($arg === '--help' || $arg === '-h') {
+            $out['help'] = true;
+            continue;
+        }
+        if (str_starts_with($arg, '--') && str_contains($arg, '=')) {
+            [$k, $v] = explode('=', substr($arg, 2), 2);
+            $out[$k] = $v;
+        }
+    }
+    return $out;
+}
+
+$args = parseArgs($argv);
+if (!empty($args['help'])) {
+    usage();
+    exit(0);
+}
+
+$root = realpath(__DIR__) ?: __DIR__;
+$publicDir = $root . DIRECTORY_SEPARATOR . 'public';
+$router = $publicDir . DIRECTORY_SEPARATOR . 'index.php';
+
+if (!is_dir($publicDir) || !is_file($router)) {
+    fwrite(STDERR, "Erro: estrutura inválida. Esperado public/ e public/index.php na raiz.\n");
+    exit(1);
+}
+
+$host = $args['host'] ?? '127.0.0.1';
+$port = (int) ($args['port'] ?? 8090);
+if ($port <= 0 || $port > 65535) {
+    fwrite(STDERR, "Erro: porta inválida.\n");
+    exit(1);
+}
+
+$dbPath = getenv('DB_PATH');
+if ($dbPath === false || trim($dbPath) === '') {
+    $dbPath = $args['db'] ?? './data/zipcode.db';
+}
+
+$installEnabledEnv = getenv('INSTALL_ENABLED');
+$installEnabled = $installEnabledEnv === false || trim($installEnabledEnv) === ''
+    ? parseBool($args['install-enabled'] ?? null, true)
+    : parseBool($installEnabledEnv, true);
+
+// Garantir pasta data/ quando o db está relativo na raiz
+if (str_starts_with($dbPath, './data/') || $dbPath === './data/zipcode.db') {
+    $dataDir = $root . DIRECTORY_SEPARATOR . 'data';
+    if (!is_dir($dataDir)) {
+        mkdir($dataDir, 0775, true);
+    }
+}
+
+putenv('DB_PATH=' . $dbPath);
+putenv('INSTALL_ENABLED=' . ($installEnabled ? 'true' : 'false'));
+
+fwrite(STDOUT, "DB_PATH={$dbPath}\n");
+fwrite(STDOUT, "INSTALL_ENABLED=" . ($installEnabled ? 'true' : 'false') . "\n");
+fwrite(STDOUT, "Iniciando: http://{$host}:{$port}\n");
+
+$cmd = [
+    PHP_BINARY,
+    '-S',
+    "{$host}:{$port}",
+    '-t',
+    $publicDir,
+    $router,
+];
+
+// Exec substitui o processo atual (melhor para Ctrl+C e logs)
+pcntl_async_signals(true);
+exec(implode(' ', array_map('escapeshellarg', $cmd)));
+
