@@ -62,10 +62,10 @@ curl -s http://localhost:8080/api/getcep/40330200 \
 
 ## Providers (ordem de consulta)
 
-1. AwesomeAPI
-2. BrasilAPI v2
-3. BrasilAPI v1
-4. ViaCEP
+1. ViaCEP
+2. AwesomeAPI
+3. BrasilAPI v2
+4. BrasilAPI v1
 5. OpenCEP
 6. ApiCEP
 

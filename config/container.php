@@ -58,10 +58,10 @@ return [
         $http = $c->get(Client::class);
 
         return new ZipcodeProviderChain([
+            new ViaCepProvider($http),
             new AwesomeApiProvider($http),
             new BrasilApiV2Provider($http),
             new BrasilApiV1Provider($http),
-            new ViaCepProvider($http),
             new OpenCepProvider($http),
             new ApiCepProvider($http),
         ]);
