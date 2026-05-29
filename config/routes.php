@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application\GetCepAction;
 use App\Application\InstallAction;
+use App\Application\ReverseGeocodeAction;
 use App\Application\ServiceAccount\CreateServiceAccountAction;
 use App\Application\ServiceAccount\DeleteServiceAccountAction;
 use App\Application\ServiceAccount\ListServiceAccountsAction;
@@ -20,6 +21,8 @@ return function (App $app): void {
 
     $app->group('/api', function (RouteCollectorProxy $group): void {
         $group->get('/getcep/{cep}', GetCepAction::class);
+        $group->get('/reverse-geocode', ReverseGeocodeAction::class);
+        $group->post('/reverse-geocode', ReverseGeocodeAction::class);
 
         $group->group('', function (RouteCollectorProxy $admin): void {
             $admin->get('/service-accounts', ListServiceAccountsAction::class);

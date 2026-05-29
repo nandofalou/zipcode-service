@@ -6,6 +6,8 @@ use App\Application\CepLookupService;
 use App\Application\GetCepAction;
 use App\Application\InstallAction;
 use App\Application\InstallService;
+use App\Application\ReverseGeocodeAction;
+use App\Application\ReverseGeocodeService;
 use App\Application\ServiceAccount\CreateServiceAccountAction;
 use App\Application\ServiceAccount\DeleteServiceAccountAction;
 use App\Application\ServiceAccount\ListServiceAccountsAction;
@@ -13,6 +15,8 @@ use App\Application\ServiceAccount\UpdateServiceAccountAction;
 use App\Application\Zipcode\DeleteZipcodeAction;
 use App\Application\Zipcode\ListZipcodesAction;
 use App\Infrastructure\Database\PdoFactory;
+use App\Infrastructure\Geocode\NominatimAddressMapper;
+use App\Infrastructure\Geocode\NominatimClient;
 use App\Infrastructure\Provider\ApiCepProvider;
 use App\Infrastructure\Provider\AwesomeApiProvider;
 use App\Infrastructure\Provider\BrasilApiV1Provider;
@@ -47,6 +51,23 @@ return [
         'connect_timeout' => 3,
         'http_errors' => false,
     ]),
+
+    'nominatim.http' => factory(function () use ($settings): Client {
+        return new Client([
+            'timeout' => 5,
+            'connect_timeout' => 3,
+            'http_errors' => false,
+            'headers' => [
+                'User-Agent' => $settings['nominatim_user_agent'],
+            ],
+        ]);
+    }),
+
+    NominatimClient::class => create()->constructor(
+        get('nominatim.http'),
+        $settings['nominatim_base_url'],
+    ),
+    NominatimAddressMapper::class => create(),
 
     CountryRepository::class => create()->constructor(get(\PDO::class)),
     StateRepository::class => create()->constructor(get(\PDO::class)),
@@ -84,6 +105,12 @@ return [
         $settings['default_country'],
     ),
 
+    ReverseGeocodeService::class => create()->constructor(
+        get(NominatimClient::class),
+        get(NominatimAddressMapper::class),
+        get(CepLookupService::class),
+    ),
+
     ServiceAuthMiddleware::class => create()->constructor(get(ServiceAccountRepository::class)),
     MasterAuthMiddleware::class => create(),
 
@@ -92,6 +119,7 @@ return [
         $settings['install_enabled'],
     ),
     GetCepAction::class => create()->constructor(get(CepLookupService::class)),
+    ReverseGeocodeAction::class => create()->constructor(get(ReverseGeocodeService::class)),
     ListServiceAccountsAction::class => create()->constructor(get(ServiceAccountRepository::class)),
     CreateServiceAccountAction::class => create()->constructor(get(ServiceAccountRepository::class)),
     UpdateServiceAccountAction::class => create()->constructor(get(ServiceAccountRepository::class)),

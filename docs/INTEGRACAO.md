@@ -130,6 +130,92 @@ Quando o CEP é inválido ou não encontrado, a API retorna **HTTP 200** com `st
 4. Estado, cidade e CEP são persistidos com nomenclatura normalizada.
 5. Consultas seguintes ao mesmo CEP usam apenas o banco local.
 
+## Reverse geocode (coordenadas → endereço)
+
+Converte latitude/longitude em endereço completo via **Nominatim**, extrai o CEP e reutiliza o fluxo de consulta de CEP. Se os providers de CEP não retornarem dados, usa o endereço do Nominatim como fallback.
+
+Disponível via **GET** (query string) ou **POST** (JSON body).
+
+```http
+GET /api/reverse-geocode?lat=-12.974&lng=-38.5014
+```
+
+```http
+POST /api/reverse-geocode
+Content-Type: application/json
+```
+
+### Parâmetros
+
+| Campo | Tipo | GET (query) | POST (body) | Descrição |
+|-------|------|-------------|-------------|-----------|
+| `lat` | number | sim | sim | Latitude (-90 a 90) |
+| `lng` | number | sim | sim | Longitude (-180 a 180) |
+
+### Exemplos de requisição
+
+```bash
+curl -s "http://localhost:8080/api/reverse-geocode?lat=-12.974&lng=-38.5014" \
+  -H "X-Service-Key: core-api" \
+  -H "X-Service-Token: SEU_TOKEN"
+```
+
+```bash
+curl -s -X POST "http://localhost:8080/api/reverse-geocode" \
+  -H "X-Service-Key: core-api" \
+  -H "X-Service-Token: SEU_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"lat": -12.9714, "lng": -38.5014}'
+```
+
+### Resposta de sucesso (HTTP 200)
+
+```json
+{
+  "status": true,
+  "message": "",
+  "zipcode": "40050565",
+  "street": "Ladeira da Fonte das Pedras",
+  "neighborhood": "Nazaré",
+  "lat": "-12.9714",
+  "lng": "-38.5014",
+  "city": {
+    "id": 1,
+    "name": "Salvador",
+    "ibge_code": null
+  },
+  "state": {
+    "id": 1,
+    "abbr": "BA"
+  }
+}
+```
+
+Os campos `lat` e `lng` na resposta refletem os valores enviados na requisição.
+
+### Erros comuns (HTTP 200, `status: false`)
+
+```json
+{
+  "status": false,
+  "message": "Campos lat e lng são obrigatórios."
+}
+```
+
+```json
+{
+  "status": false,
+  "message": "Endereço não encontrado ou fora do Brasil."
+}
+```
+
+### Fluxo interno
+
+1. Consulta Nominatim (`format=jsonv2`) com as coordenadas.
+2. Extrai `address.postcode` (CEP brasileiro, 8 dígitos).
+3. Consulta o CEP via fluxo padrão (`GET /api/getcep` equivalente).
+4. Se providers de CEP falharem, persiste e retorna dados mapeados do Nominatim.
+
 ## Obtenção de credenciais
 
 Contas de integração são criadas por um administrador (`is_master = 1`) via endpoint administrativo. Solicite ao time responsável:

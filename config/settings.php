@@ -12,4 +12,6 @@ return [
         'alphacode3' => 'BRA',
         'numcode' => 76,
     ],
+    'nominatim_base_url' => getenv('NOMINATIM_BASE_URL') ?: 'https://nominatim.openstreetmap.org',
+    'nominatim_user_agent' => getenv('NOMINATIM_USER_AGENT') ?: 'ZipcodeMicroservice/1.0 (dev-local)',
 ];

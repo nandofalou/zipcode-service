@@ -39,12 +39,14 @@ curl -s http://localhost:8080/api/getcep/40330200 \
 | `DB_PATH` | `{raiz}/data/zipcode.db` | Caminho do SQLite (Docker usa `/app/data/...`) |
 | `INSTALL_ENABLED` | `true` | `false` bloqueia `/api/install` (403) |
 | `DISPLAY_ERROR_DETAILS` | `false` | Detalhes de erro Slim |
+| `NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` | Base da API Nominatim |
+| `NOMINATIM_USER_AGENT` | `zipcodeservice/1.0 (...)` | User-Agent obrigatório para Nominatim |
 
 ## Documentação
 
 | Documento | Público | Conteúdo |
 |-----------|---------|----------|
-| [docs/INTEGRACAO.md](docs/INTEGRACAO.md) | Serviços integradores | Consulta de CEP (`GET /api/getcep/{cep}`) |
+| [docs/INTEGRACAO.md](docs/INTEGRACAO.md) | Serviços integradores | Consulta de CEP e reverse geocode |
 | [docs/ADMINISTRACAO.md](docs/ADMINISTRACAO.md) | Administradores (master) | Install, service accounts, listagem e exclusão de CEPs |
 
 ## Endpoints (resumo)
@@ -53,6 +55,7 @@ curl -s http://localhost:8080/api/getcep/40330200 \
 |--------|------|------|
 | GET | `/api/install` | Nenhuma |
 | GET | `/api/getcep/{cep}` | Service |
+| GET/POST | `/api/reverse-geocode` | Service |
 | GET | `/api/service-accounts` | Master |
 | POST | `/api/service-accounts` | Master |
 | PUT | `/api/service-accounts/{id}` | Master |
