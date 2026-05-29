@@ -358,3 +358,55 @@ Deve:
 ## CRUD de `service_account` (administração)
 
 Deve existir CRUD para administrar `service_account`, mas **somente** contas com `is_master = 1` podem acessar.
+
+## CLI — Importação IBGE
+
+Script: `bin/import-ibge.php`
+
+Bootstrap: `ContainerBuilder` + `config/container.php` (mesmo padrão de `public/index.php`).
+
+```bash
+php bin/import-ibge.php [--db=./data/zipcode.db] [--state=BA] [--dry-run] [--help]
+```
+
+| Flag | Descrição |
+|------|-----------|
+| `--db` | Sobrescreve `DB_PATH` |
+| `--state=UF` | Importa só uma UF (útil para teste) |
+| `--dry-run` | Simula sem gravar |
+| `--help` | Ajuda |
+
+### Comportamento
+
+1. Garantir país Brasil via `CountryRepository::findOrCreateDefault()` (`default_country` em settings).
+2. **Estados** — insert-only (`GET .../localidades/estados`):
+   - `id` → `state.ibge_code`
+   - `sigla` → `state.abbr` (uppercase)
+   - `nome` → `state.name`
+   - Se UF já existe (`country_id` + `abbr`): pular (não atualizar).
+3. **Municípios** — upsert por `ibge_code` (`GET .../estados/{id}/municipios` por UF):
+   - `id` → `city.ibge_code`
+   - `nome` → `city.name`
+   - `normalized_name` via `Normalizer::citySlug()`
+   - Novo: INSERT; existente: UPDATE `name`, `normalized_name`, `state_id` se necessário.
+4. Uma transação PDO por UF na importação de municípios (rollback em erro).
+
+### Saída esperada
+
+```
+IBGE import started
+States: 27 fetched, 2 inserted, 25 skipped
+BA: 417 municipalities, 10 created, 407 updated, 0 unchanged
+Done in 45s
+```
+
+Exit code: `0` sucesso, `1` erro fatal.
+
+### Docker
+
+```bash
+docker compose exec php php bin/import-ibge.php
+docker compose run --rm php php bin/import-ibge.php --state=BA
+```
+
+Requer rebuild da imagem após alterações em `bin/` ou código PHP (`docker compose up --build`).

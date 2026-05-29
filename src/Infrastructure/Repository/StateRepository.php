@@ -56,4 +56,39 @@ final class StateRepository
             'ibge_code' => null,
         ];
     }
+
+    /** @return array{inserted: bool, state: array<string, mixed>} */
+    public function insertIfNotExists(int $countryId, string $abbr, string $name, int $ibgeCode): array
+    {
+        $abbr = Normalizer::stateAbbr($abbr);
+        $existing = $this->findByAbbr($countryId, $abbr);
+        if ($existing !== null) {
+            return ['inserted' => false, 'state' => $existing];
+        }
+
+        $stateName = Normalizer::text($name) ?? $abbr;
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO state (country_id, name, abbr, ibge_code) VALUES (:country_id, :name, :abbr, :ibge_code)'
+        );
+        $stmt->execute([
+            'country_id' => $countryId,
+            'name' => $stateName,
+            'abbr' => $abbr,
+            'ibge_code' => $ibgeCode,
+        ]);
+
+        $id = (int) $this->pdo->lastInsertId();
+
+        return [
+            'inserted' => true,
+            'state' => [
+                'id' => $id,
+                'country_id' => $countryId,
+                'name' => $stateName,
+                'abbr' => $abbr,
+                'ibge_code' => $ibgeCode,
+            ],
+        ];
+    }
 }
