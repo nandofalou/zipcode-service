@@ -1,11 +1,21 @@
 # Microserviço de CEP — Especificação
 
-Serviço interno para **buscar endereço por CEP**, com cache local em **SQLite** e fallback para múltiplos **providers** externos.
+Serviço interno para **buscar endereço por CEP**, **reverse geocode** (coordenadas → endereço via Nominatim) e **importação de localidades IBGE** via CLI. Cache local em **SQLite** e fallback para múltiplos **providers** externos.
+
+## Documentação por público
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| [README.md](README.md) | Visão geral, bootstrap e quick start |
+| [docs/INTEGRACAO.md](docs/INTEGRACAO.md) | API de CEP e reverse geocode |
+| [docs/ADMINISTRACAO.md](docs/ADMINISTRACAO.md) | Install, admin, importação IBGE |
 
 ## Requisitos técnicos
 
-- **Framework**: Slim Framework (PHP), última versão estável
-- **Banco**: SQLite (arquivo em `/app/data/zipcode.db`)
+- **Framework**: Slim Framework 4 (PHP 8.4)
+- **DI**: PHP-DI (`config/container.php`)
+- **HTTP client**: Guzzle
+- **Banco**: SQLite (`DB_PATH`, padrão `{raiz}/data/zipcode.db`; Docker: `/app/data/zipcode.db`)
 - **PRAGMAs obrigatórios**:
   - `PRAGMA journal_mode=WAL;`
   - `PRAGMA synchronous=NORMAL;`
@@ -19,6 +29,33 @@ $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdo->exec('PRAGMA journal_mode=WAL;');
 $pdo->exec('PRAGMA synchronous=NORMAL;');
 $pdo->exec('PRAGMA foreign_keys=ON;');
+```
+
+## Estrutura de código (principais)
+
+```
+microservice_zipcodes/
+├── bin/import-ibge.php              # CLI importação IBGE
+├── config/
+│   ├── container.php                # DI (repos, providers, import, geocode)
+│   ├── routes.php
+│   └── settings.php                 # env: DB_PATH, NOMINATIM_*, IBGE_*
+├── public/index.php                 # Entrypoint HTTP
+├── src/
+│   ├── Application/
+│   │   ├── CepLookupService.php
+│   │   ├── ReverseGeocodeService.php
+│   │   ├── ReverseGeocodeAction.php
+│   │   └── Import/IbgeLocalidadesImporter.php
+│   ├── Infrastructure/
+│   │   ├── Ibge/IbgeLocalidadesClient.php
+│   │   ├── Geocode/NominatimClient.php
+│   │   ├── Geocode/NominatimAddressMapper.php
+│   │   ├── Provider/                  # ViaCEP, AwesomeAPI, BrasilAPI, etc.
+│   │   └── Repository/                # Country, State, City, Zipcode, ServiceAccount
+│   └── Support/Normalizer.php
+├── zipcodeserver                      # CLI dev server
+└── docs/INTEGRACAO.md, ADMINISTRACAO.md
 ```
 
 ## Modelagem do banco (DDL)
@@ -104,6 +141,15 @@ CREATE TABLE service_account (
 ```
 
 ## Providers de CEP (fallback / cadeia)
+
+Ordem implementada em `config/container.php`:
+
+1. ViaCEP
+2. AwesomeAPI
+3. BrasilAPI v2
+4. BrasilAPI v1
+5. OpenCEP
+6. ApiCEP
 
 A busca deve ser implementada de forma **extensível**, permitindo adicionar providers no futuro.
 
@@ -340,6 +386,15 @@ Requer autenticação (`X-Service-Key` + `X-Service-Token`).
 
 Variáveis: `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`.
 
+Implementação:
+
+| Classe | Responsabilidade |
+|--------|------------------|
+| `NominatimClient` | HTTP GET `/reverse?format=jsonv2` |
+| `NominatimAddressMapper` | Extrai CEP, UF, cidade, logradouro do payload |
+| `ReverseGeocodeService` | Orquestra Nominatim → `CepLookupService` → fallback Nominatim |
+| `ReverseGeocodeAction` | GET (query) e POST (JSON body) |
+
 ## Endpoint — Instalação
 
 Criar endpoint **sem autenticação**:
@@ -410,3 +465,41 @@ docker compose run --rm php php bin/import-ibge.php --state=BA
 ```
 
 Requer rebuild da imagem após alterações em `bin/` ou código PHP (`docker compose up --build`).
+
+### Implementação
+
+| Classe | Responsabilidade |
+|--------|------------------|
+| `IbgeLocalidadesClient` | HTTP GET estados e municípios (Guzzle, timeout 30s) |
+| `IbgeLocalidadesImporter` | Orquestra importação, estatísticas, transação por UF |
+| `StateRepository::insertIfNotExists` | Insert-only de UF |
+| `CityRepository::findByIbgeCode` | Busca por código IBGE |
+| `CityRepository::upsertFromIbge` | Insert ou update de município |
+
+Registrados em `config/container.php`: `IbgeLocalidadesClient`, `IbgeLocalidadesImporter`, cliente HTTP `ibge.http`.
+
+API IBGE:
+
+- Estados: `GET {IBGE_BASE_URL}/estados`
+- Municípios: `GET {IBGE_BASE_URL}/estados/{ibge_state_id}/municipios`
+
+## CLI — Servidor de desenvolvimento
+
+Script: `zipcodeserver` (raiz do projeto)
+
+```bash
+php zipcodeserver [--host=127.0.0.1] [--port=8090] [--db=./data/zipcode.db] [--install-enabled=true|false]
+```
+
+Bootstrap Slim via `public/index.php`. Porta padrão **8090** (alinhada ao `docker-compose.yml`).
+
+## Variáveis de ambiente (referência)
+
+| Variável | Padrão | Uso |
+|----------|--------|-----|
+| `DB_PATH` | `{raiz}/data/zipcode.db` | SQLite |
+| `INSTALL_ENABLED` | `true` | Bloqueia `/api/install` se `false` |
+| `DISPLAY_ERROR_DETAILS` | `false` | Slim error middleware |
+| `NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` | Reverse geocode |
+| `NOMINATIM_USER_AGENT` | `ZipcodeMicroservice/1.0 (dev-local)` | Reverse geocode (403 se genérico) |
+| `IBGE_BASE_URL` | `https://servicodados.ibge.gov.br/api/v1/localidades` | CLI import IBGE |

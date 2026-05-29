@@ -1,6 +1,16 @@
 # Administração
 
-Documentação dos endpoints restritos a contas **master** (`is_master = 1`), além do bootstrap inicial.
+Documentação dos endpoints restritos a contas **master** (`is_master = 1`), do bootstrap inicial e das **operações de manutenção** (importação IBGE).
+
+## Fluxo operacional recomendado
+
+1. `GET /api/install` — criar banco e conta admin master.
+2. `php bin/import-ibge.php` — popular estados e municípios com códigos IBGE oficiais.
+3. Criar service accounts para integradores (`POST /api/service-accounts`).
+4. Em produção: `INSTALL_ENABLED=false`.
+5. Manutenção periódica: reexecutar importação IBGE para atualizar nomes de municípios.
+
+---
 
 ## Autenticação master
 
@@ -35,7 +45,7 @@ GET /api/install
 ### Primeira instalação
 
 ```bash
-curl -s http://localhost:8080/api/install
+curl -s http://localhost:8090/api/install
 ```
 
 ```json
@@ -60,6 +70,96 @@ Guarde o `service_token` — ele só é retornado na primeira instalação.
   "service_token": null
 }
 ```
+
+---
+
+## Importação IBGE (CLI)
+
+Script operacional para popular **estados** e **municípios** a partir da [API pública do IBGE](https://servicodados.ibge.gov.br/api/docs/localidades). Não é um endpoint HTTP — roda via terminal ou cron.
+
+**Arquivo:** `bin/import-ibge.php`
+
+**Pré-requisito:** banco instalado (`GET /api/install`).
+
+### Uso
+
+```bash
+php bin/import-ibge.php [--db=./data/zipcode.db] [--state=BA] [--dry-run] [--help]
+```
+
+| Flag | Descrição |
+|------|-----------|
+| `--db=PATH` | Sobrescreve `DB_PATH` |
+| `--state=UF` | Importa apenas uma UF (útil para teste) |
+| `--dry-run` | Simula sem gravar no banco |
+| `--help` | Exibe ajuda |
+
+### Docker
+
+```bash
+# Importação completa
+docker compose exec php php bin/import-ibge.php
+
+# Uma UF (teste)
+docker compose run --rm php php bin/import-ibge.php --state=BA --dry-run
+docker compose run --rm php php bin/import-ibge.php --state=BA
+```
+
+Após alterações em `bin/` ou código PHP, rebuild: `docker compose up --build`.
+
+### Comportamento
+
+| Entidade | Estratégia | Fonte IBGE |
+|----------|------------|------------|
+| País | Garantir Brasil (`CountryRepository::findOrCreateDefault`) | Settings `default_country` |
+| Estado | **Insert-only** — UF existente não é alterada | `GET /estados` |
+| Município | **Upsert** por `city.ibge_code` (UNIQUE) | `GET /estados/{id}/municipios` |
+
+**Mapeamento de estados:**
+
+| Campo IBGE | Coluna `state` |
+|------------|----------------|
+| `id` | `ibge_code` |
+| `sigla` | `abbr` (uppercase) |
+| `nome` | `name` |
+
+**Mapeamento de municípios:**
+
+| Campo IBGE | Coluna `city` |
+|------------|---------------|
+| `id` | `ibge_code` |
+| `nome` | `name` |
+| — | `normalized_name` via `Normalizer::citySlug()` |
+
+- **Novo município:** INSERT.
+- **Existente (mesmo `ibge_code`):** UPDATE de `name`, `normalized_name` e `state_id` se necessário.
+- **Transação:** uma transação PDO por UF; rollback em erro parcial.
+
+> **Nota:** UFs criadas anteriormente via consulta de CEP (sem `ibge_code`) são **ignoradas** no insert de estados (insert-only). Os municípios são upsertados normalmente por `ibge_code`.
+
+### Saída exemplo
+
+```
+IBGE import started
+DB_PATH=./data/zipcode.db
+States: 27 fetched, 2 inserted, 25 skipped
+BA: 417 municipalities, 10 created, 407 updated, 0 unchanged
+SP: 645 municipalities, 0 created, 0 updated, 645 unchanged
+Done in 45s
+```
+
+| Exit code | Significado |
+|-----------|-------------|
+| `0` | Sucesso |
+| `1` | Erro fatal (API IBGE indisponível, UF inválida, falha de banco, etc.) |
+
+Avisos não fatais (ex.: municípios não obtidos para uma UF) são impressos em stderr.
+
+### Variável de ambiente
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `IBGE_BASE_URL` | `https://servicodados.ibge.gov.br/api/v1/localidades` | Base da API IBGE |
 
 ---
 
@@ -195,7 +295,7 @@ GET /api/zipcodes
 #### Exemplo
 
 ```bash
-curl -s "http://localhost:8080/api/zipcodes?city=Salvador&state=BA&page=1&per_page=10&sort=zipcode&order=asc" \
+curl -s "http://localhost:8090/api/zipcodes?city=Salvador&state=BA&page=1&per_page=10&sort=zipcode&order=asc" \
   -H "X-Service-Key: admin" \
   -H "X-Service-Token: TOKEN"
 ```
@@ -249,7 +349,7 @@ DELETE /api/zipcodes/{cep}
 ```
 
 ```bash
-curl -s -X DELETE "http://localhost:8080/api/zipcodes/40330200" \
+curl -s -X DELETE "http://localhost:8090/api/zipcodes/40330200" \
   -H "X-Service-Key: admin" \
   -H "X-Service-Token: TOKEN"
 ```
@@ -294,7 +394,16 @@ curl -s -X DELETE "http://localhost:8080/api/zipcodes/40330200" \
 | GET | `/api/zipcodes` | Master | Listar CEPs (filtros + paginação) |
 | DELETE | `/api/zipcodes/{cep}` | Master | Excluir CEP do cache |
 
-A consulta de CEP para integração está documentada em [INTEGRACAO.md](INTEGRACAO.md).
+A consulta de CEP e reverse geocode para integração estão em [INTEGRACAO.md](INTEGRACAO.md).
+
+---
+
+## Scripts CLI (referência)
+
+| Script | Descrição |
+|--------|-----------|
+| `bin/import-ibge.php` | Importação IBGE (esta seção) |
+| `zipcodeserver` | Servidor PHP embutido para dev local (não usar em produção) |
 
 ---
 
@@ -302,7 +411,11 @@ A consulta de CEP para integração está documentada em [INTEGRACAO.md](INTEGRA
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
+| `DB_PATH` | `{raiz}/data/zipcode.db` (Docker: `/app/data/zipcode.db`) | Caminho do SQLite |
 | `INSTALL_ENABLED` | `true` | `false` bloqueia `/api/install` |
-| `DB_PATH` | `/app/data/zipcode.db` | Caminho do SQLite |
+| `DISPLAY_ERROR_DETAILS` | `false` | Detalhes de erro Slim |
+| `NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` | Base Nominatim (reverse geocode) |
+| `NOMINATIM_USER_AGENT` | `ZipcodeMicroservice/1.0 (dev-local)` | User-Agent Nominatim |
+| `IBGE_BASE_URL` | `https://servicodados.ibge.gov.br/api/v1/localidades` | Base API IBGE (CLI) |
 
-Após o bootstrap em produção, defina `INSTALL_ENABLED=false`.
+Após o bootstrap em produção, defina `INSTALL_ENABLED=false`. Configure `NOMINATIM_USER_AGENT` com contato real em produção.
