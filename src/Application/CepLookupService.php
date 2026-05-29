@@ -46,9 +46,14 @@ final class CepLookupService
             ];
         }
 
+        return $this->saveAndFormat($address);
+    }
+
+    public function saveAndFormat(NormalizedAddress $address): array
+    {
         $this->persist($address);
 
-        $saved = $this->zipcodeRepository->findByZipcode($digits);
+        $saved = $this->zipcodeRepository->findByZipcode($address->zipcode);
         if ($saved === null) {
             return [
                 'status' => false,
@@ -57,6 +62,31 @@ final class CepLookupService
         }
 
         return $this->formatSuccess($saved);
+    }
+
+    public function formatSuccess(array $row, ?string $latOverride = null, ?string $lngOverride = null): array
+    {
+        $lat = $latOverride ?? ($row['latitude'] ?? $row['city_latitude'] ?? null);
+        $lng = $lngOverride ?? ($row['longitude'] ?? $row['city_longitude'] ?? null);
+
+        return [
+            'status' => true,
+            'message' => '',
+            'zipcode' => $row['zipcode'],
+            'street' => $row['street'] ?? '',
+            'neighborhood' => $row['neighborhood'] ?? '',
+            'lat' => $lat !== null && $lat !== '' ? (string) $lat : '',
+            'lng' => $lng !== null && $lng !== '' ? (string) $lng : '',
+            'city' => [
+                'id' => (int) $row['city_id'],
+                'name' => $row['city_name'],
+                'ibge_code' => $row['city_ibge_code'] !== null ? (int) $row['city_ibge_code'] : null,
+            ],
+            'state' => [
+                'id' => (int) $row['state_id'],
+                'abbr' => $row['state_abbr'],
+            ],
+        ];
     }
 
     private function persist(NormalizedAddress $address): void
@@ -79,30 +109,5 @@ final class CepLookupService
         } catch (\PDOException) {
             // Concorrência: outro request pode ter gravado o mesmo CEP.
         }
-    }
-
-    private function formatSuccess(array $row): array
-    {
-        $lat = $row['latitude'] ?? $row['city_latitude'] ?? null;
-        $lng = $row['longitude'] ?? $row['city_longitude'] ?? null;
-
-        return [
-            'status' => true,
-            'message' => '',
-            'zipcode' => $row['zipcode'],
-            'street' => $row['street'] ?? '',
-            'neighborhood' => $row['neighborhood'] ?? '',
-            'lat' => $lat !== null ? (string) $lat : '',
-            'lng' => $lng !== null ? (string) $lng : '',
-            'city' => [
-                'id' => (int) $row['city_id'],
-                'name' => $row['city_name'],
-                'ibge_code' => $row['city_ibge_code'] !== null ? (int) $row['city_ibge_code'] : null,
-            ],
-            'state' => [
-                'id' => (int) $row['state_id'],
-                'abbr' => $row['state_abbr'],
-            ],
-        ];
     }
 }

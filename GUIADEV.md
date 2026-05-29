@@ -308,6 +308,38 @@ GET /api/getcep/40330200
 
 Em erro, `status` deve ser `false` e `message` deve conter o motivo (string).
 
+## Endpoint — Reverse geocode (Nominatim)
+
+```http
+GET /api/reverse-geocode?lat=-12.974&lng=-38.5014
+```
+
+```http
+POST /api/reverse-geocode
+Content-Type: application/json
+```
+
+Parâmetros `lat` e `lng` via query (GET) ou body JSON (POST):
+
+```json
+{
+  "lat": -12.9714,
+  "lng": -38.5014
+}
+```
+
+Fluxo:
+
+1. Consultar Nominatim: `GET /reverse?format=jsonv2&lat={lat}&lon={lng}`
+2. Extrair CEP de `address.postcode` (somente Brasil, 8 dígitos)
+3. Consultar CEP via fluxo padrão (cache + providers)
+4. Se providers falharem, usar dados do Nominatim como fallback (`provider: nominatim`)
+5. Retornar envelope padrão; `lat`/`lng` da resposta = valores da requisição
+
+Requer autenticação (`X-Service-Key` + `X-Service-Token`).
+
+Variáveis: `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`.
+
 ## Endpoint — Instalação
 
 Criar endpoint **sem autenticação**:

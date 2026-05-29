@@ -5,6 +5,7 @@ services:
       DB_PATH: /app/data/zipcode.db
       INSTALL_ENABLED: "true"
       DISPLAY_ERROR_DETAILS: "false"
+      NOMINATIM_USER_AGENT: "ZipcodeMicroservice/1.0 (docker-local)"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
