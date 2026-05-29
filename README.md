@@ -41,6 +41,7 @@ curl -s http://localhost:8080/api/getcep/40330200 \
 | `DISPLAY_ERROR_DETAILS` | `false` | Detalhes de erro Slim |
 | `NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` | Base da API Nominatim |
 | `NOMINATIM_USER_AGENT` | `zipcodeservice/1.0 (...)` | User-Agent obrigatório para Nominatim |
+| `IBGE_BASE_URL` | `https://servicodados.ibge.gov.br/api/v1/localidades` | Base da API IBGE (CLI import) |
 
 ## Documentação
 
@@ -77,6 +78,36 @@ A consulta verifica o SQLite antes de chamar providers externos.
 ## Dados persistentes
 
 O banco fica em `./data/zipcode.db` (volume montado no container `php`).
+
+## Importação IBGE
+
+Script CLI para popular **estados** (insert-only) e **municípios** (upsert por `ibge_code`) a partir da API pública do IBGE.
+
+Pré-requisito: banco instalado (`GET /api/install` ou schema já criado).
+
+```bash
+# Simular importação de uma UF
+php bin/import-ibge.php --state=BA --dry-run
+
+# Importar municípios da Bahia
+php bin/import-ibge.php --state=BA
+
+# Importar todos os estados e municípios
+php bin/import-ibge.php
+
+# No Docker
+docker compose exec php php bin/import-ibge.php
+docker compose run --rm php php bin/import-ibge.php --state=BA
+```
+
+| Flag | Descrição |
+|------|-----------|
+| `--db=PATH` | Sobrescreve `DB_PATH` |
+| `--state=UF` | Importa apenas uma UF |
+| `--dry-run` | Simula sem gravar |
+| `--help` | Ajuda |
+
+Variável opcional: `IBGE_BASE_URL` (padrão: `https://servicodados.ibge.gov.br/api/v1/localidades`).
 
 ## Desenvolvimento local (sem Docker)
 

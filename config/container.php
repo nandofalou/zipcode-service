@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Application\Import\IbgeLocalidadesImporter;
 use App\Application\CepLookupService;
 use App\Application\GetCepAction;
 use App\Application\InstallAction;
@@ -17,6 +18,7 @@ use App\Application\Zipcode\ListZipcodesAction;
 use App\Infrastructure\Database\PdoFactory;
 use App\Infrastructure\Geocode\NominatimAddressMapper;
 use App\Infrastructure\Geocode\NominatimClient;
+use App\Infrastructure\Ibge\IbgeLocalidadesClient;
 use App\Infrastructure\Provider\ApiCepProvider;
 use App\Infrastructure\Provider\AwesomeApiProvider;
 use App\Infrastructure\Provider\BrasilApiV1Provider;
@@ -63,11 +65,24 @@ return [
         ]);
     }),
 
+    'ibge.http' => factory(function (): Client {
+        return new Client([
+            'timeout' => 30,
+            'connect_timeout' => 5,
+            'http_errors' => false,
+        ]);
+    }),
+
     NominatimClient::class => create()->constructor(
         get('nominatim.http'),
         $settings['nominatim_base_url'],
     ),
     NominatimAddressMapper::class => create(),
+
+    IbgeLocalidadesClient::class => create()->constructor(
+        get('ibge.http'),
+        $settings['ibge_base_url'],
+    ),
 
     CountryRepository::class => create()->constructor(get(\PDO::class)),
     StateRepository::class => create()->constructor(get(\PDO::class)),
@@ -109,6 +124,15 @@ return [
         get(NominatimClient::class),
         get(NominatimAddressMapper::class),
         get(CepLookupService::class),
+    ),
+
+    IbgeLocalidadesImporter::class => create()->constructor(
+        get(\PDO::class),
+        get(IbgeLocalidadesClient::class),
+        get(CountryRepository::class),
+        get(StateRepository::class),
+        get(CityRepository::class),
+        $settings['default_country'],
     ),
 
     ServiceAuthMiddleware::class => create()->constructor(get(ServiceAccountRepository::class)),

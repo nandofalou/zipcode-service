@@ -14,4 +14,5 @@ return [
     ],
     'nominatim_base_url' => getenv('NOMINATIM_BASE_URL') ?: 'https://nominatim.openstreetmap.org',
     'nominatim_user_agent' => getenv('NOMINATIM_USER_AGENT') ?: 'ZipcodeMicroservice/1.0 (dev-local)',
+    'ibge_base_url' => getenv('IBGE_BASE_URL') ?: 'https://servicodados.ibge.gov.br/api/v1/localidades',
 ];
